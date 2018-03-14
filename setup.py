@@ -1,11 +1,8 @@
 import setuptools
-import sys
-import glob
-import session_sqlalchemy
 
 setuptools.setup(
     name="telethon-session-sqlalchemy",
-    version=session_sqlalchemy.__version__,
+    version="0.1.0",
     url="https://github.com/tulir/telethon-session-sqlalchemy",
 
     author="Tulir Asokan",
