@@ -47,6 +47,9 @@ class AlchemySessionContainer:
             __tablename__ = '{prefix}version'.format(prefix=prefix)
             version = Column(Integer, primary_key=True)
 
+            def __str__(self):
+                return f"Version('{self.version}')"
+
         class Session(Base):
             query = db.query_property()
             __tablename__ = '{prefix}sessions'.format(prefix=prefix)
@@ -56,6 +59,9 @@ class AlchemySessionContainer:
             server_address = Column(String)
             port = Column(Integer)
             auth_key = Column(LargeBinary)
+
+            def __str__(self):
+                return f"Session('{self.session_id}', {self.dc_id}, '{self.server_address}', {self.port}, {self.auth_key})"
 
         class Entity(Base):
             query = db.query_property()
@@ -68,6 +74,9 @@ class AlchemySessionContainer:
             phone = Column(Integer)
             name = Column(String)
 
+            def __str__(self):
+                return f"Entity('{self.session_id}', {self.id}, {self.hash}, '{self.username}', '{self.phone}', '{self.name}')"
+
         class SentFile(Base):
             query = db.query_property()
             __tablename__ = '{prefix}sent_files'.format(prefix=prefix)
@@ -78,6 +87,9 @@ class AlchemySessionContainer:
             type = Column(Integer, primary_key=True)
             id = Column(Integer)
             hash = Column(Integer)
+
+            def __str__(self):
+                return f"SentFile('{self.session_id}', {self.md5_digest}, {self.file_size}, {self.type}, {self.id}, {self.hash})"
 
         return Version, Session, Entity, SentFile
 
@@ -207,7 +219,7 @@ class AlchemySession(MemorySession):
                 utils.get_peer_id(PeerChat(key)),
                 utils.get_peer_id(PeerChannel(key))
             )
-            query = self._db_query(self.Entity, self.Entity.id in ids)
+            query = self._db_query(self.Entity, self.Entity.id.in_(ids))
 
         row = query.one_or_none()
         return (row.id, row.hash) if row else None
