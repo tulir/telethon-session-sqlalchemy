@@ -13,7 +13,7 @@ LATEST_VERSION = 1
 
 
 class AlchemySessionContainer:
-    def __init__(self, engine=None, session=None, table_prefix='',
+    def __init__(self, engine=None, session=None, table_prefix="",
                  table_base=None, manage_tables=True):
         if isinstance(engine, str):
             engine = sql.create_engine(engine)
@@ -44,11 +44,11 @@ class AlchemySessionContainer:
     def create_table_classes(db, prefix, Base):
         class Version(Base):
             query = db.query_property()
-            __tablename__ = '{prefix}version'.format(prefix=prefix)
+            __tablename__ = "{prefix}version".format(prefix=prefix)
             version = Column(Integer, primary_key=True)
 
             def __str__(self):
-                return f"Version('{self.version}')"
+                return "Version('{}')".format(self.version)
 
         class Session(Base):
             query = db.query_property()
@@ -61,7 +61,9 @@ class AlchemySessionContainer:
             auth_key = Column(LargeBinary)
 
             def __str__(self):
-                return f"Session('{self.session_id}', {self.dc_id}, '{self.server_address}', {self.port}, {self.auth_key})"
+                return "Session('{}', {}, '{}', {}, {})".format(self.session_id, self.dc_id,
+                                                                self.server_address, self.port,
+                                                                self.auth_key)
 
         class Entity(Base):
             query = db.query_property()
@@ -75,7 +77,9 @@ class AlchemySessionContainer:
             name = Column(String)
 
             def __str__(self):
-                return f"Entity('{self.session_id}', {self.id}, {self.hash}, '{self.username}', '{self.phone}', '{self.name}')"
+                return "Entity('{}', {}, {}, '{}', '{}', '{}')".format(self.session_id, self.id,
+                                                                       self.hash, self.username,
+                                                                       self.phone, self.name)
 
         class SentFile(Base):
             query = db.query_property()
@@ -89,7 +93,9 @@ class AlchemySessionContainer:
             hash = Column(Integer)
 
             def __str__(self):
-                return f"SentFile('{self.session_id}', {self.md5_digest}, {self.file_size}, {self.type}, {self.id}, {self.hash})"
+                return "SentFile('{}', {}, {}, {}, {}, {})".format(self.session_id,
+                                                                   self.md5_digest, self.file_size,
+                                                                   self.type, self.id, self.hash)
 
         return Version, Session, Entity, SentFile
 
@@ -234,7 +240,7 @@ class AlchemySession(MemorySession):
 
     def cache_file(self, md5_digest, file_size, instance):
         if not isinstance(instance, (InputDocument, InputPhoto)):
-            raise TypeError('Cannot cache %s instance' % type(instance))
+            raise TypeError("Cannot cache %s instance" % type(instance))
 
         self.db.merge(
             self.SentFile(session_id=self.session_id, md5_digest=md5_digest,
