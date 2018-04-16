@@ -1,20 +1,22 @@
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy import Column, String, Integer, LargeBinary, orm
 import sqlalchemy as sql
-
-from telethon.sessions.memory import MemorySession, _SentFileType
+from sqlalchemy import BigInteger, Column, Integer, LargeBinary, String, orm
+from sqlalchemy.ext.declarative import declarative_base
 from telethon import utils
 from telethon.crypto import AuthKey
-from telethon.tl.types import (
-    InputPhoto, InputDocument, PeerUser, PeerChat, PeerChannel
-)
+from telethon.sessions.memory import MemorySession, _SentFileType
+from telethon.tl.types import (InputDocument, InputPhoto, PeerChannel,
+                               PeerChat, PeerUser)
 
 LATEST_VERSION = 1
 
 
 class AlchemySessionContainer:
-    def __init__(self, engine=None, session=None, table_prefix="",
-                 table_base=None, manage_tables=True):
+    def __init__(self,
+                 engine=None,
+                 session=None,
+                 table_prefix="",
+                 table_base=None,
+                 manage_tables=True):
         if isinstance(engine, str):
             engine = sql.create_engine(engine)
 
@@ -26,14 +28,14 @@ class AlchemySessionContainer:
             self.db = session
 
         table_base = table_base or declarative_base()
-        (self.Version, self.Session, self.Entity,
-         self.SentFile) = self.create_table_classes(self.db, table_prefix,
-                                                    table_base)
+        (self.Version, self.Session,
+         self.Entity, self.SentFile) = self.create_table_classes(
+             self.db, table_prefix, table_base)
 
         if manage_tables:
             table_base.metadata.bind = self.db_engine
-            if not self.db_engine.dialect.has_table(self.db_engine,
-                                                    self.Version.__tablename__):
+            if not self.db_engine.dialect.has_table(
+                    self.db_engine, self.Version.__tablename__):
                 table_base.metadata.create_all()
                 self.db.add(self.Version(version=LATEST_VERSION))
                 self.db.commit()
@@ -61,9 +63,9 @@ class AlchemySessionContainer:
             auth_key = Column(LargeBinary)
 
             def __str__(self):
-                return "Session('{}', {}, '{}', {}, {})".format(self.session_id, self.dc_id,
-                                                                self.server_address, self.port,
-                                                                self.auth_key)
+                return "Session('{}', {}, '{}', {}, {})".format(
+                    self.session_id, self.dc_id, self.server_address,
+                    self.port, self.auth_key)
 
         class Entity(Base):
             query = db.query_property()
@@ -73,13 +75,13 @@ class AlchemySessionContainer:
             id = Column(Integer, primary_key=True)
             hash = Column(Integer, nullable=False)
             username = Column(String)
-            phone = Column(Integer)
+            phone = Column(BigInteger)
             name = Column(String)
 
             def __str__(self):
-                return "Entity('{}', {}, {}, '{}', '{}', '{}')".format(self.session_id, self.id,
-                                                                       self.hash, self.username,
-                                                                       self.phone, self.name)
+                return "Entity('{}', {}, {}, '{}', '{}', '{}')".format(
+                    self.session_id, self.id, self.hash, self.username,
+                    self.phone, self.name)
 
         class SentFile(Base):
             query = db.query_property()
@@ -93,9 +95,9 @@ class AlchemySessionContainer:
             hash = Column(Integer)
 
             def __str__(self):
-                return "SentFile('{}', {}, {}, {}, {}, {})".format(self.session_id,
-                                                                   self.md5_digest, self.file_size,
-                                                                   self.type, self.id, self.hash)
+                return "SentFile('{}', {}, {}, {}, {}, {})".format(
+                    self.session_id, self.md5_digest, self.file_size,
+                    self.type, self.id, self.hash)
 
         return Version, Session, Entity, SentFile
 
@@ -164,17 +166,17 @@ class AlchemySession(MemorySession):
     def _update_session_table(self):
         self.Session.query.filter(
             self.Session.session_id == self.session_id).delete()
-        new = self.Session(session_id=self.session_id, dc_id=self._dc_id,
-                           server_address=self._server_address,
-                           port=self._port,
-                           auth_key=(self._auth_key.key
-                                     if self._auth_key else b''))
+        new = self.Session(
+            session_id=self.session_id,
+            dc_id=self._dc_id,
+            server_address=self._server_address,
+            port=self._port,
+            auth_key=(self._auth_key.key if self._auth_key else b''))
         self.db.merge(new)
 
     def _db_query(self, dbclass, *args):
-        return dbclass.query.filter(
-            dbclass.session_id == self.session_id, *args
-        )
+        return dbclass.query.filter(dbclass.session_id == self.session_id,
+                                    *args)
 
     def save(self):
         self.container.save()
@@ -189,8 +191,13 @@ class AlchemySession(MemorySession):
         self._db_query(self.SentFile).delete()
 
     def _entity_values_to_row(self, id, hash, username, phone, name):
-        return self.Entity(session_id=self.session_id, id=id, hash=hash,
-                           username=username, phone=phone, name=name)
+        return self.Entity(
+            session_id=self.session_id,
+            id=id,
+            hash=hash,
+            username=username,
+            phone=phone,
+            name=name)
 
     def process_entities(self, tlo):
         rows = self._entities_to_rows(tlo)
@@ -220,22 +227,19 @@ class AlchemySession(MemorySession):
         if exact:
             query = self._db_query(self.Entity, self.Entity.id == key)
         else:
-            ids = (
-                utils.get_peer_id(PeerUser(key)),
-                utils.get_peer_id(PeerChat(key)),
-                utils.get_peer_id(PeerChannel(key))
-            )
+            ids = (utils.get_peer_id(PeerUser(key)),
+                   utils.get_peer_id(PeerChat(key)),
+                   utils.get_peer_id(PeerChannel(key)))
             query = self._db_query(self.Entity, self.Entity.id.in_(ids))
 
         row = query.one_or_none()
         return (row.id, row.hash) if row else None
 
     def get_file(self, md5_digest, file_size, cls):
-        row = self._db_query(self.SentFile,
-                             self.SentFile.md5_digest == md5_digest,
-                             self.SentFile.file_size == file_size,
-                             self.SentFile.type == _SentFileType.from_type(
-                                 cls).value).one_or_none()
+        row = self._db_query(
+            self.SentFile, self.SentFile.md5_digest == md5_digest,
+            self.SentFile.file_size == file_size, self.SentFile.type ==
+            _SentFileType.from_type(cls).value).one_or_none()
         return (row.id, row.hash) if row else None
 
     def cache_file(self, md5_digest, file_size, instance):
@@ -243,7 +247,10 @@ class AlchemySession(MemorySession):
             raise TypeError("Cannot cache %s instance" % type(instance))
 
         self.db.merge(
-            self.SentFile(session_id=self.session_id, md5_digest=md5_digest,
-                          type=_SentFileType.from_type(type(instance)).value,
-                          id=instance.id, hash=instance.access_hash))
+            self.SentFile(
+                session_id=self.session_id,
+                md5_digest=md5_digest,
+                type=_SentFileType.from_type(type(instance)).value,
+                id=instance.id,
+                hash=instance.access_hash))
         self.save()
