@@ -1,15 +1,15 @@
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy import Column, String, Integer, LargeBinary, orm
+from sqlalchemy import Column, String, Integer, BigInteger, LargeBinary, orm
 import sqlalchemy as sql
 
 from telethon.sessions.memory import MemorySession, _SentFileType
 from telethon import utils
 from telethon.crypto import AuthKey
 from telethon.tl.types import (
-    InputPhoto, InputDocument, PeerUser, PeerChat, PeerChannel
+    InputPhoto, InputDocument, PeerUser, PeerChat, PeerChannel, updates
 )
 
-LATEST_VERSION = 1
+LATEST_VERSION = 2
 
 
 class AlchemySessionContainer:
@@ -27,8 +27,8 @@ class AlchemySessionContainer:
 
         table_base = table_base or declarative_base()
         (self.Version, self.Session, self.Entity,
-         self.SentFile) = self.create_table_classes(self.db, table_prefix,
-                                                    table_base)
+         self.SentFile, self.UpdateState) = self.create_table_classes(self.db, table_prefix,
+                                                                      table_base)
 
         if manage_tables:
             table_base.metadata.bind = self.db_engine
@@ -73,7 +73,7 @@ class AlchemySessionContainer:
             id = Column(Integer, primary_key=True)
             hash = Column(Integer, nullable=False)
             username = Column(String)
-            phone = Column(Integer)
+            phone = Column(BigInteger)
             name = Column(String)
 
             def __str__(self):
@@ -97,7 +97,18 @@ class AlchemySessionContainer:
                                                                    self.md5_digest, self.file_size,
                                                                    self.type, self.id, self.hash)
 
-        return Version, Session, Entity, SentFile
+        class UpdateState(Base):
+            query = db.query_property()
+            __tablename__ = "{prefix}update_state".format(prefix=prefix)
+
+            session_id = Column(String, primary_key=True)
+            entity_id = Column(Integer, primary_key=True)
+            pts = Column(Integer)
+            qts = Column(Integer)
+            date = Column(Integer)
+            seq = Column(Integer)
+
+        return Version, Session, Entity, SentFile, UpdateState
 
     def check_and_upgrade_database(self):
         row = self.Version.query.all()
@@ -107,7 +118,9 @@ class AlchemySessionContainer:
 
         self.Version.query.delete()
 
-        # Implement table schema updates here and increase version
+        if version == 1:
+            self.UpdateState.__table__.create(self.db_engine)
+            version = 2
 
         self.db.add(self.Version(version=version))
         self.db.commit()
@@ -155,6 +168,15 @@ class AlchemySession(MemorySession):
             self._auth_key = AuthKey(data=session.auth_key)
         else:
             self._auth_key = None
+
+    def get_update_state(self, entity_id):
+        row = self._db_query(self.UpdateState).get((self.session_id, self.entity_id))
+        if row:
+            return updates.State(row.pts, row.qts, row.date, row.seq, row.unread_count)
+
+    def set_update_state(self, entity_id, state):
+        self.db.merge(self.UpdateState(pts=row.pts, qts=row.qts, date=row.date, seq=row.seq,
+                                       unread_count=row.unread_count))
 
     @MemorySession.auth_key.setter
     def auth_key(self, value):
