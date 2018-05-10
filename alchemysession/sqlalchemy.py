@@ -70,8 +70,8 @@ class AlchemySessionContainer:
             __tablename__ = '{prefix}entities'.format(prefix=prefix)
 
             session_id = Column(String, primary_key=True)
-            id = Column(Integer, primary_key=True)
-            hash = Column(Integer, nullable=False)
+            id = Column(BigInteger, primary_key=True)
+            hash = Column(BigInteger, nullable=False)
             username = Column(String)
             phone = Column(BigInteger)
             name = Column(String)
@@ -89,8 +89,8 @@ class AlchemySessionContainer:
             md5_digest = Column(LargeBinary, primary_key=True)
             file_size = Column(Integer, primary_key=True)
             type = Column(Integer, primary_key=True)
-            id = Column(Integer)
-            hash = Column(Integer)
+            id = Column(BigInteger)
+            hash = Column(BigInteger)
 
             def __str__(self):
                 return "SentFile('{}', {}, {}, {}, {}, {})".format(self.session_id,
@@ -102,11 +102,11 @@ class AlchemySessionContainer:
             __tablename__ = "{prefix}update_state".format(prefix=prefix)
 
             session_id = Column(String, primary_key=True)
-            entity_id = Column(Integer, primary_key=True)
-            pts = Column(Integer)
-            qts = Column(Integer)
-            date = Column(Integer)
-            seq = Column(Integer)
+            entity_id = Column(BigInteger, primary_key=True)
+            pts = Column(BigInteger)
+            qts = Column(BigInteger)
+            date = Column(BigInteger)
+            seq = Column(BigInteger)
 
         return Version, Session, Entity, SentFile, UpdateState
 
