@@ -107,8 +107,14 @@ class AlchemySessionContainer:
             qts = Column(BigInteger)
             date = Column(BigInteger)
             seq = Column(BigInteger)
+            unread_count = Column(Integer)
 
         return Version, Session, Entity, SentFile, UpdateState
+
+    def _add_column(self, table, column):
+        column_name = column.compile(dialect=self.db_engine.dialect)
+        column_type = column.type.compile(self.db_engine.dialect)
+        self.db_engine.execute(f"ALTER TABLE {table.__tablename__} ADD COLUMN {column_name} {column_type}")
 
     def check_and_upgrade_database(self):
         row = self.Version.query.all()
@@ -120,7 +126,9 @@ class AlchemySessionContainer:
 
         if version == 1:
             self.UpdateState.__table__.create(self.db_engine)
-            version = 2
+            version = 3
+        elif version == 2:
+            self._add_column(self.UpdateState, Column(type=Integer, name="unread_count"))
 
         self.db.add(self.Version(version=version))
         self.db.commit()
@@ -140,9 +148,9 @@ class AlchemySession(MemorySession):
         super().__init__()
         self.container = container
         self.db = container.db
-        self.Version, self.Session, self.Entity, self.SentFile = (
+        self.Version, self.Session, self.Entity, self.SentFile, self.UpdateState = (
             container.Version, container.Session, container.Entity,
-            container.SentFile)
+            container.SentFile, container.UpdateState)
         self.session_id = session_id
         self._load_session()
 
@@ -174,9 +182,11 @@ class AlchemySession(MemorySession):
         if row:
             return updates.State(row.pts, row.qts, row.date, row.seq, row.unread_count)
 
-    def set_update_state(self, entity_id, state):
-        self.db.merge(self.UpdateState(pts=row.pts, qts=row.qts, date=row.date, seq=row.seq,
+    def set_update_state(self, entity_id, row):
+        self.db.merge(self.UpdateState(session_id=self.session_id, entity_id=entity_id,
+                                       pts=row.pts, qts=row.qts, date=row.date, seq=row.seq,
                                        unread_count=row.unread_count))
+        self.save()
 
     @MemorySession.auth_key.setter
     def auth_key(self, value):
