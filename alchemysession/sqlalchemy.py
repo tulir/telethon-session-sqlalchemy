@@ -1,3 +1,5 @@
+import datetime
+
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy import Column, String, Integer, BigInteger, LargeBinary, orm
 import sqlalchemy as sql
@@ -178,15 +180,17 @@ class AlchemySession(MemorySession):
             self._auth_key = None
 
     def get_update_state(self, entity_id):
-        row = self._db_query(self.UpdateState).get((self.session_id, self.entity_id))
+        row = self.UpdateState.query.get((self.session_id, entity_id))
         if row:
+            row.date = datetime.datetime.utcfromtimestamp(row.date)
             return updates.State(row.pts, row.qts, row.date, row.seq, row.unread_count)
 
     def set_update_state(self, entity_id, row):
-        self.db.merge(self.UpdateState(session_id=self.session_id, entity_id=entity_id,
-                                       pts=row.pts, qts=row.qts, date=row.date, seq=row.seq,
-                                       unread_count=row.unread_count))
-        self.save()
+        if row:
+            self.db.merge(self.UpdateState(session_id=self.session_id, entity_id=entity_id,
+                                           pts=row.pts, qts=row.qts, date=row.date.timestamp(), seq=row.seq,
+                                           unread_count=row.unread_count))
+            self.save()
 
     @MemorySession.auth_key.setter
     def auth_key(self, value):
