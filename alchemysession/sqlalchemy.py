@@ -56,9 +56,9 @@ class AlchemySessionContainer:
             query = db.query_property()
             __tablename__ = '{prefix}sessions'.format(prefix=prefix)
 
-            session_id = Column(String, primary_key=True)
+            session_id = Column(String(255), primary_key=True)
             dc_id = Column(Integer, primary_key=True)
-            server_address = Column(String)
+            server_address = Column(String(255))
             port = Column(Integer)
             auth_key = Column(LargeBinary)
 
@@ -71,12 +71,12 @@ class AlchemySessionContainer:
             query = db.query_property()
             __tablename__ = '{prefix}entities'.format(prefix=prefix)
 
-            session_id = Column(String, primary_key=True)
+            session_id = Column(String(255), primary_key=True)
             id = Column(BigInteger, primary_key=True)
             hash = Column(BigInteger, nullable=False)
-            username = Column(String)
+            username = Column(String(32))
             phone = Column(BigInteger)
-            name = Column(String)
+            name = Column(String(255))
 
             def __str__(self):
                 return "Entity('{}', {}, {}, '{}', '{}', '{}')".format(self.session_id, self.id,
@@ -87,7 +87,7 @@ class AlchemySessionContainer:
             query = db.query_property()
             __tablename__ = '{prefix}sent_files'.format(prefix=prefix)
 
-            session_id = Column(String, primary_key=True)
+            session_id = Column(String(255), primary_key=True)
             md5_digest = Column(LargeBinary, primary_key=True)
             file_size = Column(Integer, primary_key=True)
             type = Column(Integer, primary_key=True)
@@ -103,7 +103,7 @@ class AlchemySessionContainer:
             query = db.query_property()
             __tablename__ = "{prefix}update_state".format(prefix=prefix)
 
-            session_id = Column(String, primary_key=True)
+            session_id = Column(String(255), primary_key=True)
             entity_id = Column(BigInteger, primary_key=True)
             pts = Column(BigInteger)
             qts = Column(BigInteger)
@@ -116,7 +116,8 @@ class AlchemySessionContainer:
     def _add_column(self, table, column):
         column_name = column.compile(dialect=self.db_engine.dialect)
         column_type = column.type.compile(self.db_engine.dialect)
-        self.db_engine.execute(f"ALTER TABLE {table.__tablename__} ADD COLUMN {column_name} {column_type}")
+        self.db_engine.execute(f"ALTER TABLE {table.__tablename__} "
+                               f"ADD COLUMN {column_name} {column_type}")
 
     def check_and_upgrade_database(self):
         row = self.Version.query.all()
