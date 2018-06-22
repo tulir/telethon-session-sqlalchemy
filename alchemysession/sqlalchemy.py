@@ -116,8 +116,8 @@ class AlchemySessionContainer:
     def _add_column(self, table, column):
         column_name = column.compile(dialect=self.db_engine.dialect)
         column_type = column.type.compile(self.db_engine.dialect)
-        self.db_engine.execute(f"ALTER TABLE {table.__tablename__} "
-                               f"ADD COLUMN {column_name} {column_type}")
+        self.db_engine.execute("ALTER TABLE {} ADD COLUMN {} {}".format(
+            table.__tablename__, column_name, column_type))
 
     def check_and_upgrade_database(self):
         row = self.Version.query.all()
@@ -189,7 +189,8 @@ class AlchemySession(MemorySession):
     def set_update_state(self, entity_id, row):
         if row:
             self.db.merge(self.UpdateState(session_id=self.session_id, entity_id=entity_id,
-                                           pts=row.pts, qts=row.qts, date=row.date.timestamp(), seq=row.seq,
+                                           pts=row.pts, qts=row.qts, date=row.date.timestamp(),
+                                           seq=row.seq,
                                            unread_count=row.unread_count))
             self.save()
 
@@ -277,7 +278,7 @@ class AlchemySession(MemorySession):
 
     def cache_file(self, md5_digest, file_size, instance):
         if not isinstance(instance, (InputDocument, InputPhoto)):
-            raise TypeError("Cannot cache %s instance" % type(instance))
+            raise TypeError("Cannot cache {} instance".format(type(instance)))
 
         self.db.merge(
             self.SentFile(session_id=self.session_id, md5_digest=md5_digest,
