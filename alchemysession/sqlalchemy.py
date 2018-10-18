@@ -1,3 +1,4 @@
+from typing import Optional, Tuple, Any, Union
 import datetime
 
 from sqlalchemy.ext.declarative import declarative_base
@@ -15,8 +16,8 @@ LATEST_VERSION = 2
 
 
 class AlchemySessionContainer:
-    def __init__(self, engine=None, session=None, table_prefix="",
-                 table_base=None, manage_tables=True):
+    def __init__(self, engine=None, session: orm.Session = None, table_prefix: str = "",
+                 table_base: Optional[declarative_base] = None, manage_tables: bool = True) -> None:
         if isinstance(engine, str):
             engine = sql.create_engine(engine)
 
@@ -43,8 +44,9 @@ class AlchemySessionContainer:
                 self.check_and_upgrade_database()
 
     @staticmethod
-    def create_table_classes(db, prefix, Base):
-        class Version(Base):
+    def create_table_classes(db, prefix: str, base: declarative_base
+                             ) -> Tuple[Any, Any, Any, Any, Any]:
+        class Version(base):
             query = db.query_property()
             __tablename__ = "{prefix}version".format(prefix=prefix)
             version = Column(Integer, primary_key=True)
@@ -52,7 +54,7 @@ class AlchemySessionContainer:
             def __str__(self):
                 return "Version('{}')".format(self.version)
 
-        class Session(Base):
+        class Session(base):
             query = db.query_property()
             __tablename__ = '{prefix}sessions'.format(prefix=prefix)
 
@@ -67,7 +69,7 @@ class AlchemySessionContainer:
                                                                 self.server_address, self.port,
                                                                 self.auth_key)
 
-        class Entity(Base):
+        class Entity(base):
             query = db.query_property()
             __tablename__ = '{prefix}entities'.format(prefix=prefix)
 
@@ -83,7 +85,7 @@ class AlchemySessionContainer:
                                                                        self.hash, self.username,
                                                                        self.phone, self.name)
 
-        class SentFile(Base):
+        class SentFile(base):
             query = db.query_property()
             __tablename__ = '{prefix}sent_files'.format(prefix=prefix)
 
@@ -99,7 +101,7 @@ class AlchemySessionContainer:
                                                                    self.md5_digest, self.file_size,
                                                                    self.type, self.id, self.hash)
 
-        class UpdateState(Base):
+        class UpdateState(base):
             query = db.query_property()
             __tablename__ = "{prefix}update_state".format(prefix=prefix)
 
@@ -113,13 +115,13 @@ class AlchemySessionContainer:
 
         return Version, Session, Entity, SentFile, UpdateState
 
-    def _add_column(self, table, column):
+    def _add_column(self, table: Any, column: Column) -> None:
         column_name = column.compile(dialect=self.db_engine.dialect)
         column_type = column.type.compile(self.db_engine.dialect)
         self.db_engine.execute("ALTER TABLE {} ADD COLUMN {} {}".format(
             table.__tablename__, column_name, column_type))
 
-    def check_and_upgrade_database(self):
+    def check_and_upgrade_database(self) -> None:
         row = self.Version.query.all()
         version = row[0].version if row else 1
         if version == LATEST_VERSION:
@@ -136,28 +138,29 @@ class AlchemySessionContainer:
         self.db.add(self.Version(version=version))
         self.db.commit()
 
-    def new_session(self, session_id):
+    def new_session(self, session_id: str) -> 'AlchemySession':
         return AlchemySession(self, session_id)
 
     def list_sessions(self):
         return
 
-    def save(self):
+    def save(self) -> None:
         self.db.commit()
 
 
 class AlchemySession(MemorySession):
-    def __init__(self, container, session_id):
+    def __init__(self, container: AlchemySessionContainer, session_id: str) -> None:
         super().__init__()
         self.container = container
         self.db = container.db
+        self.engine = container.db_engine
         self.Version, self.Session, self.Entity, self.SentFile, self.UpdateState = (
             container.Version, container.Session, container.Entity,
             container.SentFile, container.UpdateState)
         self.session_id = session_id
         self._load_session()
 
-    def _load_session(self):
+    def _load_session(self) -> None:
         sessions = self._db_query(self.Session).all()
         session = sessions[0] if sessions else None
         if session:
@@ -166,10 +169,10 @@ class AlchemySession(MemorySession):
             self._port = session.port
             self._auth_key = AuthKey(data=session.auth_key)
 
-    def clone(self, to_instance=None):
+    def clone(self, to_instance=None) -> MemorySession:
         return super().clone(MemorySession())
 
-    def set_dc(self, dc_id, server_address, port):
+    def set_dc(self, dc_id: str, server_address: str, port: int) -> None:
         super().set_dc(dc_id, server_address, port)
         self._update_session_table()
 
@@ -180,13 +183,14 @@ class AlchemySession(MemorySession):
         else:
             self._auth_key = None
 
-    def get_update_state(self, entity_id):
+    def get_update_state(self, entity_id: int) -> Optional[updates.State]:
         row = self.UpdateState.query.get((self.session_id, entity_id))
         if row:
             row.date = datetime.datetime.utcfromtimestamp(row.date)
             return updates.State(row.pts, row.qts, row.date, row.seq, row.unread_count)
+        return None
 
-    def set_update_state(self, entity_id, row):
+    def set_update_state(self, entity_id: int, row: Any) -> None:
         if row:
             self.db.merge(self.UpdateState(session_id=self.session_id, entity_id=entity_id,
                                            pts=row.pts, qts=row.qts, date=row.date.timestamp(),
@@ -195,42 +199,41 @@ class AlchemySession(MemorySession):
             self.save()
 
     @MemorySession.auth_key.setter
-    def auth_key(self, value):
+    def auth_key(self, value: AuthKey) -> None:
         self._auth_key = value
         self._update_session_table()
 
-    def _update_session_table(self):
-        self.Session.query.filter(
-            self.Session.session_id == self.session_id).delete()
-        new = self.Session(session_id=self.session_id, dc_id=self._dc_id,
-                           server_address=self._server_address,
-                           port=self._port,
-                           auth_key=(self._auth_key.key
-                                     if self._auth_key else b''))
-        self.db.merge(new)
+    def _update_session_table(self) -> None:
+        self.engine.execute(
+            self.Session.__table__.delete().where(self.Session.session_id == self.session_id))
+        self.engine.execute(self.Session.__table__.insert(),
+                            session_id=self.session_id, dc_id=self._dc_id,
+                            server_address=self._server_address, port=self._port,
+                            auth_key=(self._auth_key.key if self._auth_key else b''))
 
-    def _db_query(self, dbclass, *args):
+    def _db_query(self, dbclass: Any, *args: Any) -> orm.Query:
         return dbclass.query.filter(
             dbclass.session_id == self.session_id, *args
         )
 
-    def save(self):
+    def save(self) -> None:
         self.container.save()
 
-    def close(self):
+    def close(self) -> None:
         # Nothing to do here, connection is managed by AlchemySessionContainer.
         pass
 
-    def delete(self):
+    def delete(self) -> None:
         self._db_query(self.Session).delete()
         self._db_query(self.Entity).delete()
         self._db_query(self.SentFile).delete()
 
-    def _entity_values_to_row(self, id, hash, username, phone, name):
+    def _entity_values_to_row(self, id: int, hash: int, username: str, phone: str, name: str
+                              ) -> None:
         return self.Entity(session_id=self.session_id, id=id, hash=hash,
                            username=username, phone=phone, name=name)
 
-    def process_entities(self, tlo):
+    def process_entities(self, tlo: Any) -> None:
         rows = self._entities_to_rows(tlo)
         if not rows:
             return
@@ -239,22 +242,22 @@ class AlchemySession(MemorySession):
             self.db.merge(row)
         self.save()
 
-    def get_entity_rows_by_phone(self, key):
+    def get_entity_rows_by_phone(self, key: str) -> Optional[Tuple[int, int]]:
         row = self._db_query(self.Entity,
                              self.Entity.phone == key).one_or_none()
         return (row.id, row.hash) if row else None
 
-    def get_entity_rows_by_username(self, key):
+    def get_entity_rows_by_username(self, key: str) -> Optional[Tuple[int, int]]:
         row = self._db_query(self.Entity,
                              self.Entity.username == key).one_or_none()
         return (row.id, row.hash) if row else None
 
-    def get_entity_rows_by_name(self, key):
+    def get_entity_rows_by_name(self, key: str) -> Optional[Tuple[int, int]]:
         row = self._db_query(self.Entity,
                              self.Entity.name == key).one_or_none()
         return (row.id, row.hash) if row else None
 
-    def get_entity_rows_by_id(self, key, exact=True):
+    def get_entity_rows_by_id(self, key: int, exact: bool = True) -> Optional[Tuple[int, int]]:
         if exact:
             query = self._db_query(self.Entity, self.Entity.id == key)
         else:
@@ -268,7 +271,7 @@ class AlchemySession(MemorySession):
         row = query.one_or_none()
         return (row.id, row.hash) if row else None
 
-    def get_file(self, md5_digest, file_size, cls):
+    def get_file(self, md5_digest: str, file_size: int, cls: Any) -> Optional[Tuple[int, int]]:
         row = self._db_query(self.SentFile,
                              self.SentFile.md5_digest == md5_digest,
                              self.SentFile.file_size == file_size,
@@ -276,7 +279,8 @@ class AlchemySession(MemorySession):
                                  cls).value).one_or_none()
         return (row.id, row.hash) if row else None
 
-    def cache_file(self, md5_digest, file_size, instance):
+    def cache_file(self, md5_digest: str, file_size: int,
+                   instance: Union[InputDocument, InputPhoto]) -> None:
         if not isinstance(instance, (InputDocument, InputPhoto)):
             raise TypeError("Cannot cache {} instance".format(type(instance)))
 
