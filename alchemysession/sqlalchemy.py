@@ -3,8 +3,7 @@ import datetime
 
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.dialects.postgresql import insert
-from sqlalchemy import (Column, String, Integer, BigInteger, LargeBinary, orm,
-                        and_, exists, select, literal)
+from sqlalchemy import Column, String, Integer, BigInteger, LargeBinary, orm, and_, select
 import sqlalchemy as sql
 
 from telethon.sessions.memory import MemorySession, _SentFileType
@@ -298,35 +297,38 @@ class AlchemySession(MemorySession):
 class AlchemyCoreSession(AlchemySession):
     def _load_session(self) -> None:
         t = self.Session.__table__
-        rows = self.engine.execute(select([t.dc_id, t.server_address, t.port, t.auth_key])
-                                   .where(t.session_id == self.session_id))
-        if rows and len(rows) > 0:
-            self._dc_id, self._server_address, self._port, auth_key = rows[0]
+        rows = self.engine.execute(select([t.c.dc_id, t.c.server_address, t.c.port, t.c.auth_key])
+                                   .where(t.c.session_id == self.session_id))
+        try:
+            self._dc_id, self._server_address, self._port, auth_key = next(rows)
             self._auth_key = AuthKey(data=auth_key)
+        except StopIteration:
+            pass
 
     def get_update_state(self, entity_id: int) -> Optional[updates.State]:
         t = self.UpdateState.__table__
         rows = self.engine.execute(select([t])
-                                   .where(and_(t.session_id == self.session_id,
-                                               t.entity_id == entity_id)))
-        if rows and len(rows) == 1:
-            _, _, pts, qts, date, seq, unread_count = rows[0]
+                                   .where(and_(t.c.session_id == self.session_id,
+                                               t.c.entity_id == entity_id)))
+        try:
+            _, _, pts, qts, date, seq, unread_count = next(rows)
             date = datetime.datetime.utcfromtimestamp(date)
             return updates.State(pts, qts, date, seq, unread_count)
-        return None
+        except StopIteration:
+            return None
 
     def set_update_state(self, entity_id: int, row: Any) -> None:
         t = self.UpdateState.__table__
         values = dict(pts=row.pts, qts=row.qts, date=row.date.timestamp(),
                       seq=row.seq, unread_count=row.unread_count)
-        self.engine.execute(t.insert()
+        self.engine.execute(insert(t)
                             .values(session_id=self.session_id, entity_id=entity_id, **values)
                             .on_conflict_do_update(constraint=t.primary_key, set_=values))
 
     def _update_session_table(self) -> None:
         self.engine.execute(
             self.Session.__table__.delete().where(self.Session.session_id == self.session_id))
-        self.engine.execute(self.Session.__table__.insert(),
+        self.engine.execute(insert(self.Session.__table__),
                             session_id=self.session_id, dc_id=self._dc_id,
                             server_address=self._server_address, port=self._port,
                             auth_key=(self._auth_key.key if self._auth_key else b''))
@@ -337,13 +339,13 @@ class AlchemyCoreSession(AlchemySession):
 
     def delete(self) -> None:
         self.engine.execute(self.Session.__table__.delete().where(
-            self.Session.__table__.session_id == self.session_id))
+            self.Session.__table__.c.session_id == self.session_id))
         self.engine.execute(self.Entity.__table__.delete().where(
-            self.Entity.__table__.session_id == self.session_id))
+            self.Entity.__table__.c.session_id == self.session_id))
         self.engine.execute(self.SentFile.__table__.delete().where(
-            self.SentFile.__table__.session_id == self.session_id))
+            self.SentFile.__table__.c.session_id == self.session_id))
         self.engine.execute(self.UpdateState.delete().where(
-            self.UpdateState.__table__.session_id == self.session_id))
+            self.UpdateState.__table__.c.session_id == self.session_id))
 
     def _entity_values_to_row(self, id: int, hash: int, username: str, phone: str, name: str
                               ) -> Any:
@@ -358,53 +360,68 @@ class AlchemyCoreSession(AlchemySession):
         with self.engine.begin() as conn:
             for row in rows:
                 values = dict(hash=row[1], username=row[2], phone=row[3], name=row[4])
-                conn.execute(t.insert()
+                conn.execute(insert(t)
                              .values(session_id=self.session_id, id=row[0], **values)
                              .on_conflict_do_update(constraint=t.primary_key, set_=values))
 
     def get_entity_rows_by_phone(self, key: str) -> Optional[Tuple[int, int]]:
         t = self.Entity.__table__
-        rows = self.engine.execute(select([t.id, t.hash])
-                                   .where(and_(t.session_id == self.session_id, t.phone == key)))
-        return rows[0] if rows and len(rows) > 0 else None
+        rows = self.engine.execute(select([t.c.id, t.c.hash]).where(
+            and_(t.c.session_id == self.session_id, t.c.phone == key)))
+        try:
+            return next(rows)
+        except StopIteration:
+            return None
 
     def get_entity_rows_by_username(self, key: str) -> Optional[Tuple[int, int]]:
         t = self.Entity.__table__
-        rows = self.engine.execute(select([t.id, t.hash])
-                                   .where(and_(t.session_id == self.session_id, t.phone == key)))
-        return rows[0] if rows and len(rows) > 0 else None
+        rows = self.engine.execute(select([t.c.id, t.c.hash]).where(
+            and_(t.c.session_id == self.session_id, t.c.username == key)))
+        try:
+            return next(rows)
+        except StopIteration:
+            return None
 
     def get_entity_rows_by_name(self, key: str) -> Optional[Tuple[int, int]]:
         t = self.Entity.__table__
-        rows = self.engine.execute(select([t.id, t.hash])
-                                   .where(and_(t.session_id == self.session_id, t.name == key)))
-        return rows[0] if rows and len(rows) > 0 else None
+        rows = self.engine.execute(select([t.c.id, t.c.hash])
+                                   .where(and_(t.c.session_id == self.session_id, t.c.name == key)))
+        try:
+            return next(rows)
+        except StopIteration:
+            return None
 
     def get_entity_rows_by_id(self, key: int, exact: bool = True) -> Optional[Tuple[int, int]]:
         t = self.Entity.__table__
         if exact:
-            rows = self.engine.execute(select([t.id, t.hash])
-                                       .where(and_(t.session_id == self.session_id, t.id == key)))
+            rows = self.engine.execute(select([t.c.id, t.c.hash]).where(
+                and_(t.c.session_id == self.session_id, t.c.id == key)))
         else:
             ids = (
                 utils.get_peer_id(PeerUser(key)),
                 utils.get_peer_id(PeerChat(key)),
                 utils.get_peer_id(PeerChannel(key))
             )
-            rows = self.engine.execute(select([t.id, t.hash])
-                                       .where(and_(t.session_id == self.session_id, t.id.in_(ids))))
+            rows = self.engine.execute(select([t.c.id, t.c.hash])
+                .where(
+                and_(t.c.session_id == self.session_id, t.c.id.in_(ids))))
 
-        return rows[0] if rows and len(rows) > 0 else None
+        try:
+            return next(rows)
+        except StopIteration:
+            return None
 
     def get_file(self, md5_digest: str, file_size: int, cls: Any) -> Optional[Tuple[int, int]]:
         t = self.SentFile.__table__
-        rows = (self.engine.execute(select([t.id, t.hash])
-                                    .where(and_(t.session_id == self.session_id,
-                                                t.md5_digest == md5_digest,
-                                                t.file_size == file_size,
-                                                t.type == _SentFileType.from_type(cls).value))))
-        if rows and len(rows) == 1:
-            return rows[0]
+        rows = (self.engine.execute(select([t.c.id, t.c.hash])
+                                    .where(and_(t.c.session_id == self.session_id,
+                                                t.c.md5_digest == md5_digest,
+                                                t.c.file_size == file_size,
+                                                t.c.type == _SentFileType.from_type(cls).value))))
+        try:
+            return next(rows)
+        except StopIteration:
+            return None
 
     def cache_file(self, md5_digest: str, file_size: int,
                    instance: Union[InputDocument, InputPhoto]) -> None:
@@ -413,7 +430,7 @@ class AlchemyCoreSession(AlchemySession):
 
         t = self.SentFile.__table__
         values = dict(id=instance.id, hash=instance.access_hash)
-        self.engine.execute(t.insert()
+        self.engine.execute(insert(t)
                             .values(session_id=self.session_id, md5_digest=md5_digest,
                                     type=_SentFileType.from_type(type(instance)).value,
                                     file_size=file_size, **values)
