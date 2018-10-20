@@ -2,7 +2,9 @@ from typing import Optional, Tuple, Any, Union
 import datetime
 
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy import Column, String, Integer, BigInteger, LargeBinary, orm
+from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy import (Column, String, Integer, BigInteger, LargeBinary, orm,
+                        and_, exists, select, literal)
 import sqlalchemy as sql
 
 from telethon.sessions.memory import MemorySession, _SentFileType
@@ -32,6 +34,7 @@ class AlchemySessionContainer:
         (self.Version, self.Session, self.Entity,
          self.SentFile, self.UpdateState) = self.create_table_classes(self.db, table_prefix,
                                                                       table_base)
+        self.core_mode = False
 
         if manage_tables:
             table_base.metadata.bind = self.db_engine
@@ -139,6 +142,8 @@ class AlchemySessionContainer:
         self.db.commit()
 
     def new_session(self, session_id: str) -> 'AlchemySession':
+        if self.core_mode:
+            return AlchemyCoreSession(self, session_id)
         return AlchemySession(self, session_id)
 
     def list_sessions(self):
@@ -204,12 +209,10 @@ class AlchemySession(MemorySession):
         self._update_session_table()
 
     def _update_session_table(self) -> None:
-        self.engine.execute(
-            self.Session.__table__.delete().where(self.Session.session_id == self.session_id))
-        self.engine.execute(self.Session.__table__.insert(),
-                            session_id=self.session_id, dc_id=self._dc_id,
-                            server_address=self._server_address, port=self._port,
-                            auth_key=(self._auth_key.key if self._auth_key else b''))
+        self.Session.query.filter(self.Session.session_id == self.session_id).delete()
+        self.db.add(self.Session(session_id=self.session_id, dc_id=self._dc_id,
+                                 server_address=self._server_address, port=self._port,
+                                 auth_key=(self._auth_key.key if self._auth_key else b'')))
 
     def _db_query(self, dbclass: Any, *args: Any) -> orm.Query:
         return dbclass.query.filter(
@@ -227,9 +230,10 @@ class AlchemySession(MemorySession):
         self._db_query(self.Session).delete()
         self._db_query(self.Entity).delete()
         self._db_query(self.SentFile).delete()
+        self._db_query(self.UpdateState).delete()
 
     def _entity_values_to_row(self, id: int, hash: int, username: str, phone: str, name: str
-                              ) -> None:
+                              ) -> Any:
         return self.Entity(session_id=self.session_id, id=id, hash=hash,
                            username=username, phone=phone, name=name)
 
@@ -285,7 +289,132 @@ class AlchemySession(MemorySession):
             raise TypeError("Cannot cache {} instance".format(type(instance)))
 
         self.db.merge(
-            self.SentFile(session_id=self.session_id, md5_digest=md5_digest,
+            self.SentFile(session_id=self.session_id, md5_digest=md5_digest, file_size=file_size,
                           type=_SentFileType.from_type(type(instance)).value,
                           id=instance.id, hash=instance.access_hash))
         self.save()
+
+
+class AlchemyCoreSession(AlchemySession):
+    def _load_session(self) -> None:
+        t = self.Session.__table__
+        rows = self.engine.execute(select([t.dc_id, t.server_address, t.port, t.auth_key])
+                                   .where(t.session_id == self.session_id))
+        if rows and len(rows) > 0:
+            self._dc_id, self._server_address, self._port, auth_key = rows[0]
+            self._auth_key = AuthKey(data=auth_key)
+
+    def get_update_state(self, entity_id: int) -> Optional[updates.State]:
+        t = self.UpdateState.__table__
+        rows = self.engine.execute(select([t])
+                                   .where(and_(t.session_id == self.session_id,
+                                               t.entity_id == entity_id)))
+        if rows and len(rows) == 1:
+            _, _, pts, qts, date, seq, unread_count = rows[0]
+            date = datetime.datetime.utcfromtimestamp(date)
+            return updates.State(pts, qts, date, seq, unread_count)
+        return None
+
+    def set_update_state(self, entity_id: int, row: Any) -> None:
+        t = self.UpdateState.__table__
+        values = dict(pts=row.pts, qts=row.qts, date=row.date.timestamp(),
+                      seq=row.seq, unread_count=row.unread_count)
+        self.engine.execute(t.insert()
+                            .values(session_id=self.session_id, entity_id=entity_id, **values)
+                            .on_conflict_do_update(constraint=t.primary_key, set_=values))
+
+    def _update_session_table(self) -> None:
+        self.engine.execute(
+            self.Session.__table__.delete().where(self.Session.session_id == self.session_id))
+        self.engine.execute(self.Session.__table__.insert(),
+                            session_id=self.session_id, dc_id=self._dc_id,
+                            server_address=self._server_address, port=self._port,
+                            auth_key=(self._auth_key.key if self._auth_key else b''))
+
+    def save(self) -> None:
+        # engine.execute() autocommits
+        pass
+
+    def delete(self) -> None:
+        self.engine.execute(self.Session.__table__.delete().where(
+            self.Session.__table__.session_id == self.session_id))
+        self.engine.execute(self.Entity.__table__.delete().where(
+            self.Entity.__table__.session_id == self.session_id))
+        self.engine.execute(self.SentFile.__table__.delete().where(
+            self.SentFile.__table__.session_id == self.session_id))
+        self.engine.execute(self.UpdateState.delete().where(
+            self.UpdateState.__table__.session_id == self.session_id))
+
+    def _entity_values_to_row(self, id: int, hash: int, username: str, phone: str, name: str
+                              ) -> Any:
+        return id, hash, username, phone, name
+
+    def process_entities(self, tlo: Any) -> None:
+        rows = self._entities_to_rows(tlo)
+        if not rows:
+            return
+
+        t = self.Entity.__table__
+        with self.engine.begin() as conn:
+            for row in rows:
+                values = dict(hash=row[1], username=row[2], phone=row[3], name=row[4])
+                conn.execute(t.insert()
+                             .values(session_id=self.session_id, id=row[0], **values)
+                             .on_conflict_do_update(constraint=t.primary_key, set_=values))
+
+    def get_entity_rows_by_phone(self, key: str) -> Optional[Tuple[int, int]]:
+        t = self.Entity.__table__
+        rows = self.engine.execute(select([t.id, t.hash])
+                                   .where(and_(t.session_id == self.session_id, t.phone == key)))
+        return rows[0] if rows and len(rows) > 0 else None
+
+    def get_entity_rows_by_username(self, key: str) -> Optional[Tuple[int, int]]:
+        t = self.Entity.__table__
+        rows = self.engine.execute(select([t.id, t.hash])
+                                   .where(and_(t.session_id == self.session_id, t.phone == key)))
+        return rows[0] if rows and len(rows) > 0 else None
+
+    def get_entity_rows_by_name(self, key: str) -> Optional[Tuple[int, int]]:
+        t = self.Entity.__table__
+        rows = self.engine.execute(select([t.id, t.hash])
+                                   .where(and_(t.session_id == self.session_id, t.name == key)))
+        return rows[0] if rows and len(rows) > 0 else None
+
+    def get_entity_rows_by_id(self, key: int, exact: bool = True) -> Optional[Tuple[int, int]]:
+        t = self.Entity.__table__
+        if exact:
+            rows = self.engine.execute(select([t.id, t.hash])
+                                       .where(and_(t.session_id == self.session_id, t.id == key)))
+        else:
+            ids = (
+                utils.get_peer_id(PeerUser(key)),
+                utils.get_peer_id(PeerChat(key)),
+                utils.get_peer_id(PeerChannel(key))
+            )
+            rows = self.engine.execute(select([t.id, t.hash])
+                                       .where(and_(t.session_id == self.session_id, t.id.in_(ids))))
+
+        return rows[0] if rows and len(rows) > 0 else None
+
+    def get_file(self, md5_digest: str, file_size: int, cls: Any) -> Optional[Tuple[int, int]]:
+        t = self.SentFile.__table__
+        rows = (self.engine.execute(select([t.id, t.hash])
+                                    .where(and_(t.session_id == self.session_id,
+                                                t.md5_digest == md5_digest,
+                                                t.file_size == file_size,
+                                                t.type == _SentFileType.from_type(cls).value))))
+        if rows and len(rows) == 1:
+            return rows[0]
+
+    def cache_file(self, md5_digest: str, file_size: int,
+                   instance: Union[InputDocument, InputPhoto]) -> None:
+        if not isinstance(instance, (InputDocument, InputPhoto)):
+            raise TypeError("Cannot cache {} instance".format(type(instance)))
+
+        t = self.SentFile.__table__
+        values = dict(id=instance.id, hash=instance.access_hash)
+        self.engine.execute(t.insert()
+                            .values(session_id=self.session_id, md5_digest=md5_digest,
+                                    type=_SentFileType.from_type(type(instance)).value,
+                                    file_size=file_size, **values)
+                            .on_conflict_do_update(constraint=t.primary_key, set_=values))
