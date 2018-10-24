@@ -344,7 +344,7 @@ class AlchemyCoreSession(AlchemySession):
             self.Entity.__table__.c.session_id == self.session_id))
         self.engine.execute(self.SentFile.__table__.delete().where(
             self.SentFile.__table__.c.session_id == self.session_id))
-        self.engine.execute(self.UpdateState.delete().where(
+        self.engine.execute(self.UpdateState.__table__.delete().where(
             self.UpdateState.__table__.c.session_id == self.session_id))
 
     def _entity_values_to_row(self, id: int, hash: int, username: str, phone: str, name: str
