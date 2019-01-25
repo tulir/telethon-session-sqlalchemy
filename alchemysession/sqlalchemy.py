@@ -190,8 +190,8 @@ class AlchemySession(MemorySession):
     def get_update_state(self, entity_id: int) -> Optional[updates.State]:
         row = self.UpdateState.query.get((self.session_id, entity_id))
         if row:
-            row.date = datetime.datetime.utcfromtimestamp(row.date)
-            return updates.State(row.pts, row.qts, row.date, row.seq, row.unread_count)
+            date = datetime.datetime.utcfromtimestamp(row.date)
+            return updates.State(row.pts, row.qts, date, row.seq, row.unread_count)
         return None
 
     def set_update_state(self, entity_id: int, row: Any) -> None:
