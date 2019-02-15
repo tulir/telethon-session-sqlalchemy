@@ -79,6 +79,8 @@ class AlchemyCoreSession(AlchemySession):
             for row in rows:
                 conn.execute(t.delete().where(and_(t.c.session_id == self.session_id,
                                                    t.c.id == row[0])))
+        with self.engine.begin() as conn:
+            for row in rows:
                 conn.execute(t.insert()
                              .values(session_id=self.session_id, id=row[0], hash=row[1],
                                      username=row[2], phone=row[3], name=row[4]))
