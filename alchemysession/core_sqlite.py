@@ -8,9 +8,9 @@ from .core import AlchemyCoreSession
 
 class AlchemySQLiteCoreSession(AlchemyCoreSession):
     def set_update_state(self, entity_id: int, row: Any) -> None:
-        self.engine.execute(f"INSERT OR REPLACE INTO {self.UpdateState.__tablename__} "
-                            f"VALUES (:session_id, :entity_id, :pts, :qts, :date, :seq, "
-                            f"        :unread_count)",
+        self.engine.execute("INSERT OR REPLACE INTO {} ".format(self.UpdateState.__tablename__) +
+                            "VALUES (:session_id, :entity_id, :pts, :qts, :date, :seq, "
+                            "        :unread_count)",
                             dict(session_id=self.session_id, entity_id=entity_id, pts=row.pts,
                                  qts=row.qts, date=row.date.timestamp(), seq=row.seq,
                                  unread_count=row.unread_count))
@@ -20,8 +20,8 @@ class AlchemySQLiteCoreSession(AlchemyCoreSession):
         if not rows:
             return
 
-        self.engine.execute(f"INSERT OR REPLACE INTO {self.Entity.__tablename__} "
-                            f"VALUES (:session_id, :id, :hash, :username, :phone, :name)",
+        self.engine.execute("INSERT OR REPLACE INTO {} ".format(self.Entity.__tablename__) +
+                            "VALUES (:session_id, :id, :hash, :username, :phone, :name)",
                             [dict(session_id=self.session_id, id=row[0], hash=row[1],
                                   username=row[2], phone=row[3], name=row[4])
                              for row in rows])
@@ -33,8 +33,8 @@ class AlchemySQLiteCoreSession(AlchemyCoreSession):
 
         t = self.SentFile.__table__
         values = dict(id=instance.id, hash=instance.access_hash)
-        self.engine.execute(f"INSERT OR REPLACE INTO {self.SentFile.__tablename__} "
-                            f"VALUES (:session_id, :md5_digest, :type, :file_size)",
+        self.engine.execute("INSERT OR REPLACE INTO {} ".format(self.SentFile.__tablename__) +
+                            "VALUES (:session_id, :md5_digest, :type, :file_size)",
                             dict(session_id=self.session_id, md5_digest=md5_digest,
                                  type=_SentFileType.from_type(type(instance)).value,
                                  file_size=file_size, **values))
