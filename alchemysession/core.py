@@ -75,38 +75,25 @@ class AlchemyCoreSession(AlchemySession):
             return
 
         t = self.Entity.__table__
-        with self.engine.begin() as conn:
-            for row in rows:
-                conn.execute(t.delete().where(and_(t.c.session_id == self.session_id,
-                                                   t.c.id == row[0])))
-        with self.engine.begin() as conn:
-            for row in rows:
-                conn.execute(t.insert()
-                             .values(session_id=self.session_id, id=row[0], hash=row[1],
-                                     username=row[2], phone=row[3], name=row[4]))
+        self.engine.execute(t.delete().where(and_(t.c.session_id == self.session_id,
+                                                  t.c.id.in_([row[0] for row in rows]))))
+        self.engine.execute(t.insert(), [dict(session_id=self.session_id, id=row[0], hash=row[1],
+                                              username=row[2], phone=row[3], name=row[4])
+                                         for row in rows])
 
     def get_entity_rows_by_phone(self, key: str) -> Optional[Tuple[int, int]]:
-        t = self.Entity.__table__
-        rows = self.engine.execute(select([t.c.id, t.c.hash]).where(
-            and_(t.c.session_id == self.session_id, t.c.phone == key)))
-        try:
-            return next(rows)
-        except StopIteration:
-            return None
+        return self._get_entity_rows_by_condition(self.Entity.__table__.c.phone == key)
 
     def get_entity_rows_by_username(self, key: str) -> Optional[Tuple[int, int]]:
-        t = self.Entity.__table__
-        rows = self.engine.execute(select([t.c.id, t.c.hash]).where(
-            and_(t.c.session_id == self.session_id, t.c.username == key)))
-        try:
-            return next(rows)
-        except StopIteration:
-            return None
+        return self._get_entity_rows_by_condition(self.Entity.__table__.c.username == key)
 
     def get_entity_rows_by_name(self, key: str) -> Optional[Tuple[int, int]]:
+        return self._get_entity_rows_by_condition(self.Entity.__table__.c.name == key)
+
+    def _get_entity_rows_by_condition(self, condition) -> Optional[Tuple[int, int]]:
         t = self.Entity.__table__
         rows = self.engine.execute(select([t.c.id, t.c.hash])
-                                   .where(and_(t.c.session_id == self.session_id, t.c.name == key)))
+                                   .where(and_(t.c.session_id == self.session_id, condition)))
         try:
             return next(rows)
         except StopIteration:

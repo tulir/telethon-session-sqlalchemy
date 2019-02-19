@@ -23,12 +23,16 @@ class AlchemyPostgresCoreSession(AlchemyCoreSession):
             return
 
         t = self.Entity.__table__
-        with self.engine.begin() as conn:
-            for row in rows:
-                values = dict(hash=row[1], username=row[2], phone=row[3], name=row[4])
-                conn.execute(insert(t)
-                             .values(session_id=self.session_id, id=row[0], **values)
-                             .on_conflict_do_update(constraint=t.primary_key, set_=values))
+        ins = insert(t)
+        upsert = ins.on_conflict_do_update(constraint=t.primary_key, set_={
+            "hash": ins.excluded.hash,
+            "username": ins.excluded.username,
+            "phone": ins.excluded.phone,
+            "name": ins.excluded.name,
+        })
+        self.engine.execute(upsert, [dict(session_id=self.session_id, id=row[0], hash=row[1],
+                                          username=row[2], phone=row[3], name=row[4])
+                                     for row in rows])
 
     def cache_file(self, md5_digest: str, file_size: int,
                    instance: Union[InputDocument, InputPhoto]) -> None:

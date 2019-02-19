@@ -7,6 +7,7 @@ import sqlalchemy as sql
 from .orm import AlchemySession
 from .core import AlchemyCoreSession
 from .core_mysql import AlchemyMySQLCoreSession
+from .core_sqlite import AlchemySQLiteCoreSession
 from .core_postgres import AlchemyPostgresCoreSession
 
 LATEST_VERSION = 2
@@ -52,6 +53,8 @@ class AlchemySessionContainer:
                 self.alchemy_session_class = AlchemyMySQLCoreSession
             elif self.db_engine.dialect.name == "postgres":
                 self.alchemy_session_class = AlchemyPostgresCoreSession
+            elif self.db_engine.dialect.name == "sqlite":
+                self.alchemy_session_class = AlchemySQLiteCoreSession
             else:
                 self.alchemy_session_class = AlchemyCoreSession
         else:
