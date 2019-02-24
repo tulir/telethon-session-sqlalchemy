@@ -13,9 +13,10 @@ class AlchemyMySQLCoreSession(AlchemyCoreSession):
         t = self.UpdateState.__table__
         values = dict(pts=row.pts, qts=row.qts, date=row.date.timestamp(),
                       seq=row.seq, unread_count=row.unread_count)
-        self.engine.execute(insert(t)
-                            .values(session_id=self.session_id, entity_id=entity_id, **values)
-                            .on_duplicate_key_update(**values))
+        with self.engine.begin() as conn:
+            conn.execute(insert(t)
+                         .values(session_id=self.session_id, entity_id=entity_id, **values)
+                         .on_duplicate_key_update(**values))
 
     def process_entities(self, tlo: Any) -> None:
         rows = self._entities_to_rows(tlo)
@@ -37,8 +38,9 @@ class AlchemyMySQLCoreSession(AlchemyCoreSession):
 
         t = self.SentFile.__table__
         values = dict(id=instance.id, hash=instance.access_hash)
-        self.engine.execute(insert(t)
-                            .values(session_id=self.session_id, md5_digest=md5_digest,
-                                    type=_SentFileType.from_type(type(instance)).value,
-                                    file_size=file_size, **values)
-                            .on_duplicate_key_update(**values))
+        with self.engine.begin() as conn:
+            conn.execute(insert(t)
+                         .values(session_id=self.session_id, md5_digest=md5_digest,
+                                 type=_SentFileType.from_type(type(instance)).value,
+                                 file_size=file_size, **values)
+                         .on_duplicate_key_update(**values))

@@ -13,9 +13,10 @@ class AlchemyPostgresCoreSession(AlchemyCoreSession):
         t = self.UpdateState.__table__
         values = dict(pts=row.pts, qts=row.qts, date=row.date.timestamp(),
                       seq=row.seq, unread_count=row.unread_count)
-        self.engine.execute(insert(t)
-                            .values(session_id=self.session_id, entity_id=entity_id, **values)
-                            .on_conflict_do_update(constraint=t.primary_key, set_=values))
+        with self.engine.begin() as conn:
+            conn.execute(insert(t)
+                         .values(session_id=self.session_id, entity_id=entity_id, **values)
+                         .on_conflict_do_update(constraint=t.primary_key, set_=values))
 
     def process_entities(self, tlo: Any) -> None:
         rows = self._entities_to_rows(tlo)
@@ -30,9 +31,10 @@ class AlchemyPostgresCoreSession(AlchemyCoreSession):
             "phone": ins.excluded.phone,
             "name": ins.excluded.name,
         })
-        self.engine.execute(upsert, [dict(session_id=self.session_id, id=row[0], hash=row[1],
-                                          username=row[2], phone=row[3], name=row[4])
-                                     for row in rows])
+        with self.engine.begin() as conn:
+            conn.execute(upsert, [dict(session_id=self.session_id, id=row[0], hash=row[1],
+                                       username=row[2], phone=row[3], name=row[4])
+                                  for row in rows])
 
     def cache_file(self, md5_digest: str, file_size: int,
                    instance: Union[InputDocument, InputPhoto]) -> None:
@@ -41,8 +43,9 @@ class AlchemyPostgresCoreSession(AlchemyCoreSession):
 
         t = self.SentFile.__table__
         values = dict(id=instance.id, hash=instance.access_hash)
-        self.engine.execute(insert(t)
-                            .values(session_id=self.session_id, md5_digest=md5_digest,
-                                    type=_SentFileType.from_type(type(instance)).value,
-                                    file_size=file_size, **values)
-                            .on_conflict_do_update(constraint=t.primary_key, set_=values))
+        with self.engine.begin() as conn:
+            conn.execute(insert(t)
+                         .values(session_id=self.session_id, md5_digest=md5_digest,
+                                 type=_SentFileType.from_type(type(instance)).value,
+                                 file_size=file_size, **values)
+                         .on_conflict_do_update(constraint=t.primary_key, set_=values))

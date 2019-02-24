@@ -44,26 +44,28 @@ class AlchemyCoreSession(AlchemySession):
                                     unread_count=row.unread_count))
 
     def _update_session_table(self) -> None:
-        self.engine.execute(
-            self.Session.__table__.delete().where(self.Session.session_id == self.session_id))
-        self.engine.execute(self.Session.__table__.insert(),
-                            session_id=self.session_id, dc_id=self._dc_id,
-                            server_address=self._server_address, port=self._port,
-                            auth_key=(self._auth_key.key if self._auth_key else b''))
+        with self.engine.begin() as conn:
+            conn.execute(
+                self.Session.__table__.delete().where(self.Session.session_id == self.session_id))
+            conn.execute(self.Session.__table__.insert(),
+                         session_id=self.session_id, dc_id=self._dc_id,
+                         server_address=self._server_address, port=self._port,
+                         auth_key=(self._auth_key.key if self._auth_key else b''))
 
     def save(self) -> None:
         # engine.execute() autocommits
         pass
 
     def delete(self) -> None:
-        self.engine.execute(self.Session.__table__.delete().where(
-            self.Session.__table__.c.session_id == self.session_id))
-        self.engine.execute(self.Entity.__table__.delete().where(
-            self.Entity.__table__.c.session_id == self.session_id))
-        self.engine.execute(self.SentFile.__table__.delete().where(
-            self.SentFile.__table__.c.session_id == self.session_id))
-        self.engine.execute(self.UpdateState.__table__.delete().where(
-            self.UpdateState.__table__.c.session_id == self.session_id))
+        with self.engine.begin() as conn:
+            conn.execute(self.Session.__table__.delete().where(
+                self.Session.__table__.c.session_id == self.session_id))
+            conn.execute(self.Entity.__table__.delete().where(
+                self.Entity.__table__.c.session_id == self.session_id))
+            conn.execute(self.SentFile.__table__.delete().where(
+                self.SentFile.__table__.c.session_id == self.session_id))
+            conn.execute(self.UpdateState.__table__.delete().where(
+                self.UpdateState.__table__.c.session_id == self.session_id))
 
     def _entity_values_to_row(self, id: int, hash: int, username: str, phone: str, name: str
                               ) -> Any:
@@ -75,11 +77,12 @@ class AlchemyCoreSession(AlchemySession):
             return
 
         t = self.Entity.__table__
-        self.engine.execute(t.delete().where(and_(t.c.session_id == self.session_id,
-                                                  t.c.id.in_([row[0] for row in rows]))))
-        self.engine.execute(t.insert(), [dict(session_id=self.session_id, id=row[0], hash=row[1],
-                                              username=row[2], phone=row[3], name=row[4])
-                                         for row in rows])
+        with self.engine.begin() as conn:
+            conn.execute(t.delete().where(and_(t.c.session_id == self.session_id,
+                                               t.c.id.in_([row[0] for row in rows]))))
+            conn.execute(t.insert(), [dict(session_id=self.session_id, id=row[0], hash=row[1],
+                                           username=row[2], phone=row[3], name=row[4])
+                                      for row in rows])
 
     def get_entity_rows_by_phone(self, key: str) -> Optional[Tuple[int, int]]:
         return self._get_entity_rows_by_condition(self.Entity.__table__.c.phone == key)
@@ -138,9 +141,9 @@ class AlchemyCoreSession(AlchemySession):
 
         t = self.SentFile.__table__
         file_type = _SentFileType.from_type(type(instance)).value
-        self.engine.execute(t.delete().where(session_id=self.session_id, md5_digest=md5_digest,
-                                             type=file_type, file_size=file_size))
-        self.engine.execute(t.insert()
-                            .values(session_id=self.session_id, md5_digest=md5_digest,
-                                    type=file_type, file_size=file_size, id=instance.id,
-                                    hash=instance.access_hash))
+        with self.engine.begin() as conn:
+            conn.execute(t.delete().where(session_id=self.session_id, md5_digest=md5_digest,
+                                          type=file_type, file_size=file_size))
+            conn.execute(t.insert().values(session_id=self.session_id, md5_digest=md5_digest,
+                                           type=file_type, file_size=file_size, id=instance.id,
+                                           hash=instance.access_hash))
