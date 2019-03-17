@@ -22,6 +22,15 @@ class AlchemyCoreSession(AlchemySession):
         except StopIteration:
             pass
 
+    def _get_auth_key(self) -> Optional[AuthKey]:
+        t = self.Session.__table__
+        rows = self.engine.execute(t.select([t.c.auth_key]))
+        try:
+            ak = next(rows)[0]
+        except (StopIteration, IndexError):
+            ak = None
+        return AuthKey(data=ak) if ak else None
+
     def get_update_state(self, entity_id: int) -> Optional[updates.State]:
         t = self.UpdateState.__table__
         rows = self.engine.execute(select([t])

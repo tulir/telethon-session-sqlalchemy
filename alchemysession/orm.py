@@ -36,16 +36,17 @@ class AlchemySession(MemorySession):
     def clone(self, to_instance=None) -> MemorySession:
         return super().clone(MemorySession())
 
-    def set_dc(self, dc_id: str, server_address: str, port: int) -> None:
-        super().set_dc(dc_id, server_address, port)
-        self._update_session_table()
-
+    def _get_auth_key(self) -> Optional[AuthKey]:
         sessions = self._db_query(self.Session).all()
         session = sessions[0] if sessions else None
         if session and session.auth_key:
-            self._auth_key = AuthKey(data=session.auth_key)
-        else:
-            self._auth_key = None
+            return AuthKey(data=session.auth_key)
+        return None
+
+    def set_dc(self, dc_id: str, server_address: str, port: int) -> None:
+        super().set_dc(dc_id, server_address, port)
+        self._update_session_table()
+        self._auth_key = self._get_auth_key()
 
     def get_update_state(self, entity_id: int) -> Optional[updates.State]:
         row = self.UpdateState.query.get((self.session_id, entity_id))
