@@ -24,7 +24,7 @@ class AlchemyCoreSession(AlchemySession):
 
     def _get_auth_key(self) -> Optional[AuthKey]:
         t = self.Session.__table__
-        rows = self.engine.execute(select([t.c.auth_key]))
+        rows = self.engine.execute(select([t.c.auth_key]).where(t.c.session_id == self.session_id))
         try:
             ak = next(rows)[0]
         except (StopIteration, IndexError):
