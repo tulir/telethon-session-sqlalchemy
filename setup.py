@@ -2,7 +2,7 @@ import setuptools
 
 setuptools.setup(
     name="telethon-session-sqlalchemy",
-    version="0.2.12",
+    version="0.2.13",
     url="https://github.com/tulir/telethon-session-sqlalchemy",
 
     author="Tulir Asokan",
