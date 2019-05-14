@@ -61,7 +61,7 @@ class AlchemySessionContainer:
         if val:
             if self.db_engine.dialect.name == "mysql":
                 self.alchemy_session_class = AlchemyMySQLCoreSession
-            elif self.db_engine.dialect.name == "postgres":
+            elif self.db_engine.dialect.name == "postgresql":
                 self.alchemy_session_class = AlchemyPostgresCoreSession
             elif self.db_engine.dialect.name == "sqlite":
                 self.alchemy_session_class = AlchemySQLiteCoreSession
