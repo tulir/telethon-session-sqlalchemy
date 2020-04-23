@@ -2,7 +2,7 @@ from typing import Optional, Tuple, Any, Union
 
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm.scoping import scoped_session
-from sqlalchemy import Column, String, Integer, BigInteger, LargeBinary, orm, func, select
+from sqlalchemy import Column, String, Integer, BigInteger, LargeBinary, orm, func, select, and_
 import sqlalchemy as sql
 
 from .orm import AlchemySession
@@ -176,7 +176,8 @@ class AlchemySessionContainer:
         if self.core_mode:
             t = self.Session.__table__
             rows = self.db_engine.execute(select([func.count(t.c.auth_key)])
-                                          .where(t.c.session_id == session_id))
+                                          .where(and_(t.c.session_id == session_id,
+                                                      t.c.auth_key != b'')))
             try:
                 count, = next(rows)
                 return count > 0
