@@ -2,7 +2,7 @@ import setuptools
 
 setuptools.setup(
     name="telethon-session-sqlalchemy",
-    version="0.2.15",
+    version="0.2.16",
     url="https://github.com/tulir/telethon-session-sqlalchemy",
 
     author="Tulir Asokan",
@@ -22,10 +22,11 @@ setuptools.setup(
         "License :: OSI Approved :: MIT License",
         "Programming Language :: Python",
         "Programming Language :: Python :: 3",
-        "Programming Language :: Python :: 3.4",
-        "Programming Language :: Python :: 3.5",
         "Programming Language :: Python :: 3.6",
+        "Programming Language :: Python :: 3.7",
+        "Programming Language :: Python :: 3.8",
+        "Programming Language :: Python :: 3.9",
     ],
-    python_requires="~=3.4",
+    python_requires="~=3.5",
 )
 

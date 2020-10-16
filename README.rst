@@ -29,7 +29,7 @@ is to simply pass it the database URL:
 .. code-block:: python
 
     from alchemysession import AlchemySessionContainer
-    container = AlchemySessionContainer('mysql://user:pass@localhost/telethon')
+    container = AlchemySessionContainer('postgres://user:pass@localhost/telethon')
 
 If you already have SQLAlchemy set up for your own project, you can also pass
 the engine separately:
