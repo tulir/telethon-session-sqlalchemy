@@ -121,7 +121,7 @@ class AlchemySessionContainer:
             __tablename__ = '{prefix}sent_files'.format(prefix=prefix)
 
             session_id = Column(String(255), primary_key=True)
-            md5_digest = Column(LargeBinary, primary_key=True)
+            md5_digest = Column(LargeBinary)
             file_size = Column(Integer, primary_key=True)
             type = Column(Integer, primary_key=True)
             id = Column(BigInteger)
